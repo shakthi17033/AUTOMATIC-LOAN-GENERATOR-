@@ -1,194 +1,287 @@
 import streamlit as st
 import pandas as pd
-import random
 
-st.set_page_config(page_title="AI Loan Evaluation System", layout="wide")
+st.set_page_config(page_title="AI Bank Loan Decision System", layout="wide")
 
-# -----------------------------
+# -------------------------------------------------
 # STYLE
-# -----------------------------
+# -------------------------------------------------
 
 st.markdown("""
 <style>
-
-body{
-background-color:#eef2ff;
-}
-
 .title{
-font-size:42px;
+font-size:40px;
 font-weight:bold;
 text-align:center;
-color:#1f4cff;
+color:#1d4ed8;
 }
 
-.box{
-background:white;
+.block{
+background-color:#f8fafc;
 padding:20px;
 border-radius:10px;
-box-shadow:0px 0px 10px rgba(0,0,0,0.1);
+margin-bottom:20px;
 }
 
 </style>
 """, unsafe_allow_html=True)
 
-st.markdown('<p class="title">🏦 Autonomous Loan Evaluation System</p>', unsafe_allow_html=True)
+st.markdown('<p class="title">🏦 Autonomous Bank Loan Decision System</p>', unsafe_allow_html=True)
 
-# -----------------------------
-# INPUT SECTION
-# -----------------------------
+st.write("This system simulates **real banking loan evaluation using an agentic workflow**.")
 
-st.subheader("Applicant Information")
+# -------------------------------------------------
+# APPLICATION INTAKE AGENT
+# -------------------------------------------------
+
+st.header("Loan Application Form")
 
 col1, col2 = st.columns(2)
 
 with col1:
+
     name = st.text_input("Applicant Name")
     age = st.slider("Age",18,65)
-    income = st.number_input("Monthly Income",0)
+    income = st.number_input("Monthly Income (₹)",0)
+    employment = st.selectbox(
+        "Employment Type",
+        ["Salaried","Self Employed","Business","Student"]
+    )
 
 with col2:
-    credit = st.slider("Credit Score",300,900)
-    loan = st.number_input("Loan Amount Requested",0)
-    existing_loans = st.slider("Existing Loans",0,5)
 
-employment = st.selectbox(
-"Employment Type",
-["Salaried","Self Employed","Student","Business"]
-)
+    credit_score = st.slider("Credit Score",300,900)
+    loan_amount = st.number_input("Loan Amount Requested (₹)",0)
+    tenure = st.slider("Loan Tenure (Years)",1,30)
+    existing_emi = st.number_input("Existing Monthly EMI (₹)",0)
 
-# -----------------------------
-# AGENTS
-# -----------------------------
+# -------------------------------------------------
+# BANK CALCULATIONS
+# -------------------------------------------------
 
-def eligibility_agent(income, credit):
+def calculate_emi(P,r,n):
+
+    r = r/(12*100)
+    n = n*12
+
+    if P == 0:
+        return 0
+
+    emi = P*r*(1+r)**n/((1+r)**n-1)
+
+    return emi
+
+def debt_to_income(total_emi,income):
+
+    if income == 0:
+        return 0
+
+    return (total_emi/income)*100
+
+def loan_to_income(loan_amount,income):
+
+    if income == 0:
+        return 0
+
+    return loan_amount/(income*12)
+
+# -------------------------------------------------
+# ELIGIBILITY AGENT
+# -------------------------------------------------
+
+def eligibility_agent(age,income,credit_score):
+
+    if age < 21:
+        return False,"Applicant below eligible age"
+
+    if income < 20000:
+        return False,"Income below bank minimum threshold"
+
+    if credit_score < 600:
+        return False,"Credit score below bank requirement"
+
+    return True,"Applicant passes basic eligibility"
+
+# -------------------------------------------------
+# RISK AGENT
+# -------------------------------------------------
+
+def risk_agent(credit_score,dti,lti):
+
     score = 0
 
-    if income > 50000:
+    if credit_score > 750:
         score += 40
-    elif income > 30000:
+    elif credit_score > 650:
         score += 25
     else:
         score += 10
 
-    if credit > 750:
-        score += 40
-    elif credit > 650:
-        score += 25
+    if dti < 30:
+        score += 30
+    elif dti < 45:
+        score += 20
     else:
         score += 10
 
-    return score
-
-
-def risk_agent(score, existing_loans):
-
-    if existing_loans >= 3:
-        score -= 20
-
-    if score > 70:
-        return "Low Risk"
-    elif score > 40:
-        return "Medium Risk"
+    if lti < 5:
+        score += 30
     else:
-        return "High Risk"
+        score += 10
 
+    if score > 75:
+        return "Low Risk",score
+    elif score > 50:
+        return "Medium Risk",score
+    else:
+        return "High Risk",score
+
+# -------------------------------------------------
+# DECISION AGENT
+# -------------------------------------------------
 
 def decision_agent(risk):
 
     if risk == "Low Risk":
-        return "Approved"
+        return "Loan Approved"
+
     elif risk == "Medium Risk":
         return "Conditional Approval"
+
     else:
-        return "Rejected"
+        return "Loan Rejected"
 
+# -------------------------------------------------
+# EXPLANATION AGENT
+# -------------------------------------------------
 
-def explanation_agent(risk, decision):
+def explanation_agent(risk):
 
     if risk == "Low Risk":
-        return "Applicant has strong financial indicators and low credit risk."
+        return "Applicant shows strong financial profile and repayment capability."
 
     if risk == "Medium Risk":
-        return "Applicant has moderate financial stability. Conditional approval recommended."
+        return "Applicant has moderate financial risk. Bank may request guarantor."
 
     if risk == "High Risk":
-        return "Applicant financial risk is high. Loan should not be approved."
+        return "High financial risk due to credit profile or debt burden."
 
+# -------------------------------------------------
+# RUN WORKFLOW
+# -------------------------------------------------
 
-# -----------------------------
-# BUTTON
-# -----------------------------
+if st.button("Run Loan Evaluation Workflow"):
 
-if st.button("Evaluate Loan Application"):
+    interest_rate = 9
 
-    score = eligibility_agent(income, credit)
-    risk = risk_agent(score, existing_loans)
-    decision = decision_agent(risk)
-    explanation = explanation_agent(risk, decision)
+    emi = calculate_emi(loan_amount,interest_rate,tenure)
 
-    st.subheader("Loan Evaluation Dashboard")
+    total_emi = emi + existing_emi
 
-    c1, c2, c3 = st.columns(3)
+    dti = debt_to_income(total_emi,income)
 
-    c1.metric("Eligibility Score", score)
-    c2.metric("Risk Category", risk)
-    c3.metric("Decision", decision)
+    lti = loan_to_income(loan_amount,income)
 
-# -----------------------------
-# CHARTS
-# -----------------------------
+    eligible,message = eligibility_agent(age,income,credit_score)
 
-    st.subheader("Risk Analytics")
+    if not eligible:
 
-    data = pd.DataFrame({
-        "Factors":[
-        "Income Stability",
-        "Credit Strength",
-        "Loan Burden",
-        "Financial Reliability"
-        ],
+        st.error("❌ Loan Rejected")
+        st.write(message)
 
-        "Score":[
-        min(income/1000,100),
-        credit/9,
-        max(100-existing_loans*20,20),
-        score
-        ]
-    })
+    else:
 
-    st.bar_chart(data.set_index("Factors"))
+        risk,score = risk_agent(credit_score,dti,lti)
 
-# -----------------------------
+        decision = decision_agent(risk)
+
+        explanation = explanation_agent(risk)
+
+# -------------------------------------------------
+# DASHBOARD
+# -------------------------------------------------
+
+        st.header("Loan Evaluation Dashboard")
+
+        c1,c2,c3,c4 = st.columns(4)
+
+        c1.metric("Calculated EMI",f"₹{round(emi)}")
+        c2.metric("Debt To Income Ratio",f"{round(dti)}%")
+        c3.metric("Risk Score",score)
+        c4.metric("Risk Category",risk)
+
+# -------------------------------------------------
+# FINAL DECISION
+# -------------------------------------------------
+
+        st.subheader("Final Bank Decision")
+
+        if decision == "Loan Approved":
+
+            st.success("✅ LOAN APPROVED")
+
+        elif decision == "Conditional Approval":
+
+            st.warning("⚠ CONDITIONAL APPROVAL")
+
+        else:
+
+            st.error("❌ LOAN REJECTED")
+
+        st.write(explanation)
+
+# -------------------------------------------------
+# ANALYTICS
+# -------------------------------------------------
+
+        st.subheader("Risk Factor Analysis")
+
+        df = pd.DataFrame({
+            "Factors":[
+                "Credit Score Strength",
+                "Debt Burden",
+                "Loan Exposure"
+            ],
+            "Score":[
+                credit_score/9,
+                100-dti,
+                max(100-lti*10,10)
+            ]
+        })
+
+        st.bar_chart(df.set_index("Factors"))
+
+# -------------------------------------------------
 # AGENT WORKFLOW
-# -----------------------------
+# -------------------------------------------------
 
-    st.subheader("Agent Workflow")
+        st.subheader("Agent Workflow")
 
-    st.info("""
-Application Input
-
-⬇
-
-Eligibility Agent → Calculates financial eligibility
-
-⬇
-
-Risk Assessment Agent → Determines applicant risk
-
-⬇
-
-Loan Decision Agent → Approves or rejects loan
-
-⬇
-
-Explanation Agent → Generates reasoning
+        st.info("""
+Application Intake Agent  
+⬇  
+Eligibility Check Agent  
+⬇  
+Risk Assessment Agent  
+⬇  
+Decision Agent  
+⬇  
+Explanation Agent  
 """)
 
-# -----------------------------
-# AI EXPLANATION
-# -----------------------------
+# -------------------------------------------------
+# REPORT
+# -------------------------------------------------
 
-    st.subheader("AI Explanation")
+        st.subheader("Loan Evaluation Report")
 
-    st.success(explanation)
+        st.write("Applicant:",name)
+        st.write("Income:",income)
+        st.write("Credit Score:",credit_score)
+        st.write("Loan Amount:",loan_amount)
+        st.write("Loan Tenure:",tenure,"years")
+        st.write("Calculated EMI:",round(emi))
+        st.write("Debt-To-Income:",round(dti),"%")
+        st.write("Loan-To-Income:",round(lti,2))
+        st.write("Risk Category:",risk)
+        st.write("Final Decision:",decision)
