@@ -1,302 +1,194 @@
 import streamlit as st
-import json
-import time
-from dotenv import load_dotenv
-import os
+import pandas as pd
+import random
 
-# LLM
-from langchain_openai import ChatOpenAI
-from langchain_core.messages import HumanMessage
-
-load_dotenv()
+st.set_page_config(page_title="AI Loan Evaluation System", layout="wide")
 
 # -----------------------------
-# Initialize LLM
+# STYLE
 # -----------------------------
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 
-llm = ChatOpenAI(
-    model="gpt-4o-mini",
-    temperature=0.7,
-    api_key=OPENAI_API_KEY
+st.markdown("""
+<style>
+
+body{
+background-color:#eef2ff;
+}
+
+.title{
+font-size:42px;
+font-weight:bold;
+text-align:center;
+color:#1f4cff;
+}
+
+.box{
+background:white;
+padding:20px;
+border-radius:10px;
+box-shadow:0px 0px 10px rgba(0,0,0,0.1);
+}
+
+</style>
+""", unsafe_allow_html=True)
+
+st.markdown('<p class="title">🏦 Autonomous Loan Evaluation System</p>', unsafe_allow_html=True)
+
+# -----------------------------
+# INPUT SECTION
+# -----------------------------
+
+st.subheader("Applicant Information")
+
+col1, col2 = st.columns(2)
+
+with col1:
+    name = st.text_input("Applicant Name")
+    age = st.slider("Age",18,65)
+    income = st.number_input("Monthly Income",0)
+
+with col2:
+    credit = st.slider("Credit Score",300,900)
+    loan = st.number_input("Loan Amount Requested",0)
+    existing_loans = st.slider("Existing Loans",0,5)
+
+employment = st.selectbox(
+"Employment Type",
+["Salaried","Self Employed","Student","Business"]
 )
 
-st.set_page_config(page_title="AI Grant Proposal Generator", layout="wide")
-
-# =========================================================
+# -----------------------------
 # AGENTS
-# =========================================================
+# -----------------------------
 
-def guideline_extraction_agent(text):
+def eligibility_agent(income, credit):
+    score = 0
 
-    prompt = f"""
-    Extract grant constraints from the following funding call.
+    if income > 50000:
+        score += 40
+    elif income > 30000:
+        score += 25
+    else:
+        score += 10
 
-    Return JSON with:
-    max_budget
-    mandatory_sections
-    evaluation_weights
+    if credit > 750:
+        score += 40
+    elif credit > 650:
+        score += 25
+    else:
+        score += 10
 
-    Funding Call:
-    {text}
-    """
+    return score
 
-    response = llm.invoke([HumanMessage(content=prompt)])
 
-    try:
-        return json.loads(response.content)
-    except:
-        return {
-            "max_budget": 5000000,
-            "mandatory_sections": ["Objectives","Methodology","Impact"],
-            "evaluation_weights":{
-                "Innovation":30,
-                "Feasibility":25,
-                "Impact":25,
-                "Team":20
-            }
-        }
+def risk_agent(score, existing_loans):
 
+    if existing_loans >= 3:
+        score -= 20
 
-def proposal_drafting_agent(project_info):
+    if score > 70:
+        return "Low Risk"
+    elif score > 40:
+        return "Medium Risk"
+    else:
+        return "High Risk"
 
-    prompt = f"""
-    Write a structured research grant proposal.
 
-    Project Title: {project_info['title']}
-    Problem: {project_info['problem']}
-    Methodology: {project_info['methodology']}
-    Impact: {project_info['impact']}
+def decision_agent(risk):
 
-    Sections:
-    Abstract
-    Objectives
-    Methodology
-    Impact
+    if risk == "Low Risk":
+        return "Approved"
+    elif risk == "Medium Risk":
+        return "Conditional Approval"
+    else:
+        return "Rejected"
 
-    Return JSON.
-    """
 
-    response = llm.invoke([HumanMessage(content=prompt)])
+def explanation_agent(risk, decision):
 
-    try:
-        return json.loads(response.content)
-    except:
-        return {"Draft": response.content}
+    if risk == "Low Risk":
+        return "Applicant has strong financial indicators and low credit risk."
 
+    if risk == "Medium Risk":
+        return "Applicant has moderate financial stability. Conditional approval recommended."
 
-def budget_agent(duration):
+    if risk == "High Risk":
+        return "Applicant financial risk is high. Loan should not be approved."
 
-    budget = {
-        "Equipment": 1500000,
-        "Personnel": 2000000,
-        "Travel": 500000,
-        "Contingency": 500000
-    }
 
-    timeline = []
-    for i in range(1, duration+1):
-        timeline.append(f"Month {i}: Development Phase")
+# -----------------------------
+# BUTTON
+# -----------------------------
 
-    return budget, timeline
+if st.button("Evaluate Loan Application"):
 
+    score = eligibility_agent(income, credit)
+    risk = risk_agent(score, existing_loans)
+    decision = decision_agent(risk)
+    explanation = explanation_agent(risk, decision)
 
-def evaluation_agent(proposal):
+    st.subheader("Loan Evaluation Dashboard")
 
-    proposal_text = json.dumps(proposal)
+    c1, c2, c3 = st.columns(3)
 
-    prompt = f"""
-    Evaluate this grant proposal.
+    c1.metric("Eligibility Score", score)
+    c2.metric("Risk Category", risk)
+    c3.metric("Decision", decision)
 
-    Score each category out of 25.
+# -----------------------------
+# CHARTS
+# -----------------------------
 
-    Categories:
-    Innovation
-    Feasibility
-    Impact
-    Clarity
+    st.subheader("Risk Analytics")
 
-    Return JSON:
+    data = pd.DataFrame({
+        "Factors":[
+        "Income Stability",
+        "Credit Strength",
+        "Loan Burden",
+        "Financial Reliability"
+        ],
 
-    {{
-    "total_score": number,
-    "weaknesses":[]
-    }}
+        "Score":[
+        min(income/1000,100),
+        credit/9,
+        max(100-existing_loans*20,20),
+        score
+        ]
+    })
 
-    Proposal:
-    {proposal_text}
-    """
+    st.bar_chart(data.set_index("Factors"))
 
-    response = llm.invoke([HumanMessage(content=prompt)])
+# -----------------------------
+# AGENT WORKFLOW
+# -----------------------------
 
-    try:
-        return json.loads(response.content)
-    except:
-        return {"total_score":70,"weaknesses":["Needs clearer methodology"]}
+    st.subheader("Agent Workflow")
 
+    st.info("""
+Application Input
 
-def refinement_agent(proposal, weaknesses):
+⬇
 
-    proposal_text = json.dumps(proposal)
+Eligibility Agent → Calculates financial eligibility
 
-    prompt = f"""
-    Improve the proposal based on these weaknesses:
+⬇
 
-    Weaknesses:
-    {weaknesses}
+Risk Assessment Agent → Determines applicant risk
 
-    Proposal:
-    {proposal_text}
+⬇
 
-    Return improved proposal JSON.
-    """
+Loan Decision Agent → Approves or rejects loan
 
-    response = llm.invoke([HumanMessage(content=prompt)])
+⬇
 
-    try:
-        return json.loads(response.content)
-    except:
-        return proposal
+Explanation Agent → Generates reasoning
+""")
 
+# -----------------------------
+# AI EXPLANATION
+# -----------------------------
 
-# =========================================================
-# UI
-# =========================================================
+    st.subheader("AI Explanation")
 
-st.title("🎓 AI Research Grant Proposal Generator & Evaluator")
-st.write("Agentic System: Generate → Evaluate → Improve")
-
-# Sidebar
-st.sidebar.header("⚙ Settings")
-iterations = st.sidebar.slider("Max Iterations",1,5,3)
-target_score = st.sidebar.slider("Target Score",60,100,85)
-
-# Upload guidelines
-st.header("📂 Upload Funding Guidelines")
-
-uploaded_file = st.file_uploader("Upload PDF or Text",type=["txt"])
-
-guideline_text = ""
-
-if uploaded_file:
-    guideline_text = uploaded_file.read().decode("utf-8")
-    st.success("Guidelines uploaded")
-
-# Project inputs
-st.header("🧪 Project Details")
-
-title = st.text_input("Project Title")
-problem = st.text_area("Problem Statement")
-methodology = st.text_area("Proposed Methodology")
-impact = st.text_area("Expected Impact")
-
-duration = st.number_input(
-    "Project Duration (Months)",
-    min_value=1,
-    max_value=36,
-    value=12
-)
-
-# Run system
-if st.button("🚀 Run Autonomous Proposal System"):
-
-    if not title or not problem:
-        st.warning("Please fill project details")
-        st.stop()
-
-    project_info = {
-        "title":title,
-        "problem":problem,
-        "methodology":methodology,
-        "impact":impact
-    }
-
-    # --------------------------------
-    # Step 1 Guideline Agent
-    # --------------------------------
-
-    with st.spinner("Extracting grant constraints..."):
-        constraints = guideline_extraction_agent(guideline_text)
-
-    # --------------------------------
-    # Step 2 Draft Proposal
-    # --------------------------------
-
-    with st.spinner("Generating proposal draft..."):
-        proposal = proposal_drafting_agent(project_info)
-
-    # --------------------------------
-    # Step 3 Budget Agent
-    # --------------------------------
-
-    budget,timeline = budget_agent(duration)
-
-    history=[]
-
-    # --------------------------------
-    # Iterative Loop
-    # --------------------------------
-
-    for i in range(iterations):
-
-        with st.spinner(f"Evaluating proposal (Iteration {i+1})..."):
-
-            result = evaluation_agent(proposal)
-
-        score = result["total_score"]
-        weaknesses = result["weaknesses"]
-
-        history.append({
-            "iteration":i+1,
-            "score":score,
-            "weaknesses":weaknesses
-        })
-
-        if score >= target_score:
-            break
-
-        with st.spinner("Refining proposal..."):
-            proposal = refinement_agent(proposal,weaknesses)
-
-    st.success("Process completed")
-
-    # =====================================================
-    # DISPLAY RESULTS
-    # =====================================================
-
-    col1,col2 = st.columns(2)
-
-    with col1:
-
-        st.subheader("📄 Final Proposal")
-
-        for k,v in proposal.items():
-            st.markdown(f"### {k}")
-            st.write(v)
-
-    with col2:
-
-        st.subheader("💰 Budget")
-
-        total=0
-        for k,v in budget.items():
-            st.write(f"{k}: ₹{v}")
-            total+=v
-
-        st.write(f"**Total Budget: ₹{total}**")
-
-        st.subheader("📅 Timeline")
-
-        for t in timeline[:6]:
-            st.write(t)
-
-        if len(timeline)>6:
-            st.write("...")
-
-    st.subheader("📊 Evaluation History")
-
-    for h in history:
-        st.write(f"Iteration {h['iteration']} — Score: {h['score']}")
-        st.write("Weaknesses:")
-        for w in h["weaknesses"]:
-            st.write("-",w)
+    st.success(explanation)
