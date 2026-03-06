@@ -1,5 +1,3 @@
 streamlit
-gpt4all
-langchain
-langchain-community
-pypdf
+transformers
+torch
