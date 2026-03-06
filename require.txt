@@ -1,5 +1,5 @@
 streamlit
+gpt4all
 langchain
-langchain-openai
-python-dotenv
-openai
+langchain-community
+pypdf
