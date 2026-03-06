@@ -1,17 +1,19 @@
 import streamlit as st
-from gpt4all import GPT4All
+from transformers import pipeline
 
-st.set_page_config(page_title="AI Loan Approval System")
+st.set_page_config(page_title="AI Loan Approval System", layout="centered")
 
 st.title("🏦 AI Loan Approval System")
-
 st.write("Enter your details to check if your loan will be approved.")
 
 # -------------------------
-# LOAD LOCAL LLM
+# LOAD LLM
 # -------------------------
 
-model = GPT4All("ggml-gpt4all-j-v1.3-groovy")
+llm = pipeline(
+    "text2text-generation",
+    model="google/flan-t5-small"
+)
 
 # -------------------------
 # AGENT 1 - APPLICATION AGENT
@@ -20,11 +22,12 @@ model = GPT4All("ggml-gpt4all-j-v1.3-groovy")
 def application_agent(data):
     return data
 
+
 # -------------------------
 # AGENT 2 - ELIGIBILITY AGENT
 # -------------------------
 
-def eligibility_agent(age,income,credit_score):
+def eligibility_agent(age, income, credit_score):
 
     if age < 21:
         return False
@@ -37,11 +40,12 @@ def eligibility_agent(age,income,credit_score):
 
     return True
 
+
 # -------------------------
 # AGENT 3 - RISK AGENT
 # -------------------------
 
-def risk_agent(income,existing_emi):
+def risk_agent(income, existing_emi):
 
     if existing_emi > income * 0.5:
         return "High"
@@ -51,11 +55,12 @@ def risk_agent(income,existing_emi):
 
     return "Low"
 
+
 # -------------------------
 # AGENT 4 - DECISION AGENT
 # -------------------------
 
-def decision_agent(eligible,risk,loan_amount,income):
+def decision_agent(eligible, risk, loan_amount, income):
 
     if not eligible:
         return "Rejected"
@@ -68,6 +73,7 @@ def decision_agent(eligible,risk,loan_amount,income):
 
     return "Approved"
 
+
 # -------------------------
 # AGENT 5 - LLM EXPLANATION AGENT
 # -------------------------
@@ -78,9 +84,9 @@ def explanation_agent(decision):
 Explain briefly why a bank would {decision} a loan application.
 """
 
-    response = model.generate(prompt,max_tokens=50)
+    result = llm(prompt, max_length=50)
 
-    return response
+    return result[0]["generated_text"]
 
 
 # -------------------------
@@ -89,15 +95,16 @@ Explain briefly why a bank would {decision} a loan application.
 
 name = st.text_input("Full Name")
 
-age = st.slider("Age",18,65)
+age = st.slider("Age", 18, 65)
 
-income = st.number_input("Monthly Income (₹)",0)
+income = st.number_input("Monthly Income (₹)", 0)
 
-credit_score = st.slider("Credit Score",300,900)
+credit_score = st.slider("Credit Score", 300, 900)
 
-loan_amount = st.number_input("Loan Amount Requested (₹)",0)
+loan_amount = st.number_input("Loan Amount Requested (₹)", 0)
 
-existing_emi = st.number_input("Existing Monthly EMI (₹)",0)
+existing_emi = st.number_input("Existing Monthly EMI (₹)", 0)
+
 
 # -------------------------
 # BUTTON
@@ -106,19 +113,19 @@ existing_emi = st.number_input("Existing Monthly EMI (₹)",0)
 if st.button("Check Loan Approval"):
 
     data = {
-        "name":name,
-        "age":age,
-        "income":income,
-        "credit":credit_score
+        "name": name,
+        "age": age,
+        "income": income,
+        "credit": credit_score
     }
 
     application = application_agent(data)
 
-    eligible = eligibility_agent(age,income,credit_score)
+    eligible = eligibility_agent(age, income, credit_score)
 
-    risk = risk_agent(income,existing_emi)
+    risk = risk_agent(income, existing_emi)
 
-    decision = decision_agent(eligible,risk,loan_amount,income)
+    decision = decision_agent(eligible, risk, loan_amount, income)
 
     explanation = explanation_agent(decision)
 
